@@ -1,5 +1,30 @@
-﻿{
-  "APIKey": "eOtQXwBb#J@gt#wBBXRnpgZ4U98*MJhR5un6@TwXEYX2BSezbxkdFjvNdZBaQrfq@6cQsqAuzxAjy@@HSYim2290^cSMhx@xAEPeBWdgNEZ7mjgN",
-  "Port": "2433",
-  "ResourcepackFile": "/crystopia/FileUploader__/zip/generated.zip"
+{
+  "APIKey": "IqTbQR4JG4cN2S0DENr23nr5Zw79j5fTstRrRtwBdH8jqs",
+  "Port": "1234",
+  "DevServerPluginZipURL": "https://download.mc-packs.net/pack/6c14b584ecd205bbaa88a49c1a57574c9b38e79f.zip",
+  "PackServerPluginZipURL": "https://download.mc-packs.net/pack/6c14b584ecd205bbaa88a49c1a57574c9b38e79f.zip",
+  "ServerURL": "http://127.0.0.1:9900/allservers",
+  "Nodes": {
+    "148.251.43.173": {
+      "IP": "148.251.43.173",
+      "User": "root",
+      "Password": "ESdjNKSyeE0zNWIGy3PLxfuwjkdZ6MNejpws7WcZPBSNEbHXmOV1z3N4QfOIxM7M0ZWbWoXyILQWwj4ueUvFpuUYAfjU2oDhyfbKaqP"
+    }
+  },
+  "DevServer": {
+    "148.251.43.173": {
+      "Name": "Dev-Server",
+      "IP": "148.251.43.173",
+      "User": "root",
+      "Password": "ESdjNKSyeE0zNWIGy3PLxfuwjkdZ6MNejpws7WcZPBSNEbHXmOV1z3N4QfOIxM7M0ZWbWoXyILQWwj4ueUvFpuUYAfjU2oDhyfbKaqP"
+    }
+  },
+  "PackServer": {
+    "148.251.43.173": {
+      "Name": "Pack-Server",
+      "IP": "148.251.43.173",
+      "User": "root",
+      "Password": "ESdjNKSyeE0zNWIGy3PLxfuwjkdZ6MNejpws7WcZPBSNEbHXmOV1z3N4QfOIxM7M0ZWbWoXyILQWwj4ueUvFpuUYAfjU2oDhyfbKaqP"
+    }
+  }
 }
