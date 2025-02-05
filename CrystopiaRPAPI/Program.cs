@@ -331,7 +331,6 @@ app.MapGet("/zipDevPack",
                     using (var sshclient = new SshClient(host, username, password))
                     {
                         sshclient.Connect();
-                        Console.WriteLine($"Executing: docker exec {devserver.Name.ToLower()} mc-send-to-console iaz");
 
                         var command2 =
                             sshclient.CreateCommand(
@@ -353,6 +352,51 @@ app.MapGet("/zipDevPack",
             }
         })
     .WithName("zipDevPack")
+    .WithOpenApi();
+
+app.MapPost("/createServer",
+        async (CloudServer cloudServer, HttpContext context) =>
+        {
+            var request = context.Request;
+
+            var headers = request.Headers;
+
+            if (headers.ContainsKey("Authorization"))
+            {
+                var token = headers["Authorization"].First();
+
+                if (token == config.APIKey)
+                {
+                    var devserver = config.Nodes.First().Value;
+                    string host = devserver.IP;
+                    string username = devserver.User;
+                    string password = devserver.Password;
+
+                    using (var sshclient = new SshClient(host, username, password))
+                    {
+                        sshclient.Connect();
+                        
+                        Console.WriteLine(cloudServer.Host);
+                        //var command2 =
+                        //  sshclient.CreateCommand(
+                        // $"docker run -d -it {} -e EULA=TRUE itzg/minecraft-server");
+                        //await command2.ExecuteAsync();
+                        sshclient.Disconnect();
+                    }
+                }
+                else
+                {
+                    context.Response.StatusCode = 401;
+                    Console.WriteLine("Not authorized");
+                }
+            }
+            else
+            {
+                context.Response.StatusCode = 401;
+                Console.WriteLine("Not authorized - No Authorization");
+            }
+        })
+    .WithName("createServer")
     .WithOpenApi();
 
 
