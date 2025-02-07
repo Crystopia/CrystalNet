@@ -1,10 +1,13 @@
+using System.Net;
 using System.Net.Http.Headers;
 using System.Text.Json;
 using CrystopiaRPAPI.Helpers;
 using CrystopiaRPAPI.Models;
 using Newtonsoft.Json;
+using Octokit;
 using Renci.SshNet;
 using JsonSerializer = System.Text.Json.JsonSerializer;
+using ProductHeaderValue = System.Net.Http.Headers.ProductHeaderValue;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -168,6 +171,7 @@ app.MapGet("/applyToOtherServer", async (HttpContext context) =>
     })
     .WithName("applyToOtherServer")
     .WithOpenApi();
+
 app.MapGet("/copyToProduction", async (HttpContext context) =>
     {
         var request = context.Request;
@@ -367,20 +371,126 @@ app.MapPost("/createServer",
 
                 if (token == config.APIKey)
                 {
-                    var devserver = config.Nodes.First().Value;
-                    string host = devserver.IP;
-                    string username = devserver.User;
-                    string password = devserver.Password;
+                    string host = cloudServer.Host;
+                    var node = config.Nodes.First().Value;
+                    string username = node.User;
+                    string password = node.Password;
 
                     using (var sshclient = new SshClient(host, username, password))
                     {
                         sshclient.Connect();
-                        
-                        Console.WriteLine(cloudServer.Host);
-                        //var command2 =
-                        //  sshclient.CreateCommand(
-                        // $"docker run -d -it {} -e EULA=TRUE itzg/minecraft-server");
-                        //await command2.ExecuteAsync();
+
+                        var serverOptions = cloudServer.ServerOptions;
+
+                        var command =
+                            sshclient.CreateCommand(
+                                $"docker run --name {cloudServer.Name.ToLower()} -d -it {serverOptions.Replace(";", " ")} -e EULA=TRUE -v /crystopia/{cloudServer.Name}/:/data -p {cloudServer.Port}:{cloudServer.Port} itzg/minecraft-server");
+                        command.Execute();
+                        Console.WriteLine("Created server");
+
+
+                        var ghClient = new GitHubClient(new Octokit.ProductHeaderValue("CrystopiaCloudWebAPI"));
+                        var tokenAuth = new Credentials(config.GitHubToken);
+                        ghClient.Credentials = tokenAuth;
+
+                        var releases = await ghClient.Repository.Release.GetAll("Crystopia", "ServerTemplates");
+                        var latest = releases[0];
+
+                        foreach (var asset in latest.Assets)
+                        {
+                            if (asset.Name.Equals(cloudServer.TemplateName))
+                            {
+                                var assatId = asset.Id;
+
+                                var curlCommand = sshclient.CreateCommand(
+                                    $"cd /crystopia/{cloudServer.Name} && curl -L -H \"Accept: application/octet-stream\" -H \"Authorization: Bearer {config.GitHubToken}\"  -H \"X-GitHub-Api-Version: 2022-11-28\"  https://api.github.com/repos/Crystopia/ServerTemplates/releases/assets/{assatId} -o server.zip");
+                                curlCommand.Execute();
+                            }
+                        }
+
+                        Console.WriteLine("Download successful");
+
+                        string sshremotePath = $"/crystopia/{cloudServer.Name}/server.zip";
+                        string extractPath = $"/crystopia/{cloudServer.Name}/";
+
+                        var command2 =
+                            sshclient.CreateCommand(
+                                $"unzip -o {sshremotePath} -d {extractPath}");
+                        command2.Execute();
+                        Console.WriteLine("Unzipped successful");
+
+                        var rmCommand = sshclient.CreateCommand($"rm -r {sshremotePath}");
+                        rmCommand.Execute();
+                        Console.WriteLine("Removed successful");
+
+                        sshclient.Disconnect();
+                    }
+
+                    string fileUrl = config.PackServerPluginZipURL;
+
+                    using (var sshclient = new SshClient(host, username, password))
+                    {
+                        sshclient.Connect();
+                        var command =
+                            sshclient.CreateCommand($"rm -r /crystopia/{cloudServer.Name}/plugins/ItemsAdder");
+                        command.Execute();
+                        var command2 =
+                            sshclient.CreateCommand($"cd /crystopia/{cloudServer.Name}/plugins/ && mkdir ItemsAdder");
+                        command2.Execute();
+                        sshclient.Disconnect();
+                    }
+
+                    Console.WriteLine("ItemsAdder cleared");
+
+                    string sftpHost = cloudServer.Host;
+                    int sftpPort = 22;
+                    string sftpUser = node.User;
+                    string sftpPass = node.Password;
+                    string remotePath = $"/crystopia/{cloudServer.Name}/plugins/ItemsAdder/";
+                    string remoteFilePath = $"{remotePath}pluginzip.zip";
+
+                    using (HttpClient httpClient = new HttpClient())
+                    using (Stream fileStream = await httpClient.GetStreamAsync(fileUrl))
+                    using (MemoryStream memoryStream = new MemoryStream())
+                    using (SftpClient sftpClient = new SftpClient(sftpHost, sftpPort, sftpUser, sftpPass))
+                    {
+                        await fileStream.CopyToAsync(memoryStream);
+                        memoryStream.Position = 0;
+
+                        sftpClient.Connect();
+
+                        if (!sftpClient.Exists(remotePath))
+                        {
+                            sftpClient.CreateDirectory(remotePath);
+                        }
+
+                        using (Stream sftpStream = sftpClient.OpenWrite(remoteFilePath))
+                        {
+                            await memoryStream.CopyToAsync(sftpStream);
+                        }
+
+                        sftpClient.Disconnect();
+                    }
+
+                    Console.WriteLine("pluginzip.zip updated");
+
+                    string pluginsshremotePath = $"/crystopia/{cloudServer.Name}/plugins/ItemsAdder/pluginzip.zip";
+                    string pluginextractPath = $"/crystopia/{cloudServer.Name}/plugins/ItemsAdder/";
+
+                    using (var sshclient = new SshClient(host, username, password))
+                    {
+                        sshclient.Connect();
+                        var command =
+                            sshclient.CreateCommand(
+                                $"unzip -o {pluginsshremotePath} -d {pluginextractPath} && rm {pluginsshremotePath}");
+                        command.Execute();
+                        Console.WriteLine(".zip unzipped - pluginzip.zip deleted");
+
+                        var command4 = sshclient.CreateCommand($"sudo chmod -R 777 /crystopia/{cloudServer.Name}/");
+                        command4.Execute();
+                        var command2 = sshclient.CreateCommand($"docker restart {cloudServer.Name.ToLower()}");
+                        command2.Execute();
+
                         sshclient.Disconnect();
                     }
                 }
@@ -397,6 +507,204 @@ app.MapPost("/createServer",
             }
         })
     .WithName("createServer")
+    .WithOpenApi();
+
+app.MapPost("/startServer",
+        async (ServerAction serverAction, HttpContext context) =>
+        {
+            var request = context.Request;
+
+            var headers = request.Headers;
+
+            if (headers.ContainsKey("Authorization"))
+            {
+                var token = headers["Authorization"].First();
+
+                if (token == config.APIKey)
+                {
+                    var node = config.Nodes[serverAction.Host];
+                    string host = serverAction.Host;
+                    string username = node.User;
+                    string password = node.Password;
+
+                    using (var sshclient = new SshClient(host, username, password))
+                    {
+                        sshclient.Connect();
+
+                        var command2 =
+                            sshclient.CreateCommand(
+                                $"docker start {serverAction.Name.ToLower()}");
+                        await command2.ExecuteAsync();
+                        sshclient.Disconnect();
+                    }
+                }
+                else
+                {
+                    context.Response.StatusCode = 401;
+                    Console.WriteLine("Not authorized");
+                }
+            }
+            else
+            {
+                context.Response.StatusCode = 401;
+                Console.WriteLine("Not authorized - No Authorization");
+            }
+        })
+    .WithName("startServer")
+    .WithOpenApi();
+
+app.MapPost("/stopServer",
+        async (ServerAction serverAction, HttpContext context) =>
+        {
+            var request = context.Request;
+
+            var headers = request.Headers;
+
+            if (headers.ContainsKey("Authorization"))
+            {
+                var token = headers["Authorization"].First();
+
+                if (token == config.APIKey)
+                {
+                    var node = config.Nodes[serverAction.Host];
+                    string host = serverAction.Host;
+                    string username = node.User;
+                    string password = node.Password;
+
+                    using (var sshclient = new SshClient(host, username, password))
+                    {
+                        sshclient.Connect();
+
+                        var command2 =
+                            sshclient.CreateCommand(
+                                $"docker stop {serverAction.Name.ToLower()}");
+                        await command2.ExecuteAsync();
+                        sshclient.Disconnect();
+                    }
+                }
+                else
+                {
+                    context.Response.StatusCode = 401;
+                    Console.WriteLine("Not authorized");
+                }
+            }
+            else
+            {
+                context.Response.StatusCode = 401;
+                Console.WriteLine("Not authorized - No Authorization");
+            }
+        })
+    .WithName("stopServer")
+    .WithOpenApi();
+
+app.MapPost("/updateServer",
+        async (CloudServer cloudServer, HttpContext context) =>
+        {
+            var request = context.Request;
+
+            var headers = request.Headers;
+
+            if (headers.ContainsKey("Authorization"))
+            {
+                var token = headers["Authorization"].First();
+
+                if (token == config.APIKey)
+                {
+                    var node = config.Nodes[cloudServer.Host];
+                    string host = cloudServer.Host;
+                    string username = node.User;
+                    string password = node.Password;
+
+                    using (var sshclient = new SshClient(host, username, password))
+                    {
+                        sshclient.Connect();
+
+                        var command2 =
+                            sshclient.CreateCommand(
+                                $"docker stop {cloudServer.Name.ToLower()}");
+                        await command2.ExecuteAsync();
+
+                        var command3 =
+                            sshclient.CreateCommand(
+                                $"docker rm {cloudServer.Name.ToLower()}");
+                        await command3.ExecuteAsync();
+
+                        var serverOptions = cloudServer.ServerOptions;
+                        var command = sshclient.CreateCommand(
+                            $"docker run --name {cloudServer.Name.ToLower()} -d -it {serverOptions.Replace(";", " ")} -e EULA=TRUE -v /crystopia/{cloudServer.Name}/:/data -p {cloudServer.Port}:{cloudServer.Port} itzg/minecraft-server");
+                        await command.ExecuteAsync();
+
+                        sshclient.Disconnect();
+                    }
+                }
+                else
+                {
+                    context.Response.StatusCode = 401;
+                    Console.WriteLine("Not authorized");
+                }
+            }
+            else
+            {
+                context.Response.StatusCode = 401;
+                Console.WriteLine("Not authorized - No Authorization");
+            }
+        })
+    .WithName("updateServer")
+    .WithOpenApi();
+
+app.MapPost("/deleteServer",
+        async (ServerAction serverAction, HttpContext context) =>
+        {
+            var request = context.Request;
+
+            var headers = request.Headers;
+
+            if (headers.ContainsKey("Authorization") && headers["Delete"].Equals("Force"))
+            {
+                var token = headers["Authorization"].First();
+
+                if (token == config.APIKey)
+                {
+                    var node = config.Nodes[serverAction.Host];
+                    string host = serverAction.Host;
+                    string username = node.User;
+                    string password = node.Password;
+
+                    using (var sshclient = new SshClient(host, username, password))
+                    {
+                        sshclient.Connect();
+
+                        var command2 =
+                            sshclient.CreateCommand(
+                                $"docker stop {serverAction.Name.ToLower()}");
+                        await command2.ExecuteAsync();
+
+                        var command3 =
+                            sshclient.CreateCommand(
+                                $"docker rm {serverAction.Name.ToLower()}");
+                        await command3.ExecuteAsync();
+
+
+                        var command = sshclient.CreateCommand(
+                            $"rm -r /crystopia/{serverAction.Name.ToLower()}/");
+                        await command.ExecuteAsync();
+
+                        sshclient.Disconnect();
+                    }
+                }
+                else
+                {
+                    context.Response.StatusCode = 401;
+                    Console.WriteLine("Not authorized");
+                }
+            }
+            else
+            {
+                context.Response.StatusCode = 401;
+                Console.WriteLine("Not authorized - No Authorization");
+            }
+        })
+    .WithName("deleteServer")
     .WithOpenApi();
 
 

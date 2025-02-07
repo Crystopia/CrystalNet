@@ -5,6 +5,8 @@ public class AppConfiguration
     public string APIKey { get; set; }
     public string Port { get; set; }
 
+    public string GitHubToken { get; set; }
+
     public string DevServerPluginZipURL { get; set; }
     public string PackServerPluginZipURL { get; set; }
 
