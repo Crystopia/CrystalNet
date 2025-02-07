@@ -148,6 +148,11 @@ app.MapGet("/applyToOtherServer", async (HttpContext context) =>
                                 sshclient.CreateCommand(
                                     $"unzip -o {sshremotePath} -d {extractPath} && rm {sshremotePath}");
                             command.Execute();
+
+                            var command2 =
+                                sshclient.CreateCommand(
+                                    $"docker exec {server.Name.ToLower()} mc-send-to-console iareload");
+                            command2.Execute();
                             sshclient.Disconnect();
                         }
 
@@ -659,9 +664,15 @@ app.MapPost("/deleteServer",
 
             var headers = request.Headers;
 
-            if (headers.ContainsKey("Authorization") && headers["Delete"].Equals("Force"))
+            if (headers.ContainsKey("Authorization"))
             {
                 var token = headers["Authorization"].First();
+
+                if (!serverAction.Action.Equals("Force"))
+                {
+                    context.Response.StatusCode = 401;
+                    return;
+                }
 
                 if (token == config.APIKey)
                 {
