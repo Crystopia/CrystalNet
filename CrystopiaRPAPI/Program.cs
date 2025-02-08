@@ -376,6 +376,10 @@ app.MapPost("/createServer",
 
                 if (token == config.APIKey)
                 {
+                    context.Response.StatusCode = 200;
+                    context.Response.ContentType = "application/json";
+                    await context.Response.WriteAsJsonAsync("SUCCESS");
+
                     string host = cloudServer.Host;
                     var node = config.Nodes.First().Value;
                     string username = node.User;
@@ -495,6 +499,8 @@ app.MapPost("/createServer",
                         command4.Execute();
                         var command2 = sshclient.CreateCommand($"docker restart {cloudServer.Name.ToLower()}");
                         command2.Execute();
+
+                        Console.WriteLine("Server restarted");
 
                         sshclient.Disconnect();
                     }
