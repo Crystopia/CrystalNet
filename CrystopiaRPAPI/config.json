@@ -1,9 +1,9 @@
 {
   "APIKey": "IqTbQR4JG4cN2S0DENr23nr5Zw79j5fTstRrRtwBdH8jqs",
-  "Port": "1234",
-  "DevServerPluginZipURL": "https://download.mc-packs.net/pack/6c14b584ecd205bbaa88a49c1a57574c9b38e79f.zip",
-  "PackServerPluginZipURL": "https://download.mc-packs.net/pack/6c14b584ecd205bbaa88a49c1a57574c9b38e79f.zip",
-  "ServerURL": "http://127.0.0.1:9900/allservers",
+  "Port": "6600",
+  "DevServerPluginZipURL": "https://dev.api.crystopia.net/pluginzip",
+  "PackServerPluginZipURL": "https://pack.api.crystopia.net/pluginzip",
+  "ServerURL": "https://cloud.api.crystopia.net/allservers",
   "GitHubToken": "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",
   "Nodes": {
     "148.251.43.173": {
@@ -11,7 +11,7 @@
       "User": "root",
       "Password": "ESdjNKSyeE0zNWIGy3PLxfuwjkdZ6MNejpws7WcZPBSNEbHXmOV1z3N4QfOIxM7M0ZWbWoXyILQWwj4ueUvFpuUYAfjU2oDhyfbKaqP"
     }
-  }, 
+  },
   "DevServer": {
     "148.251.43.173": {
       "Name": "Dev-Server",

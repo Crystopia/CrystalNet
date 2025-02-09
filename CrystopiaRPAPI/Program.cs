@@ -199,65 +199,40 @@ app.MapGet("/copyToProduction", async (HttpContext context) =>
                 using (var sshclient = new SshClient(host, username, password))
                 {
                     sshclient.Connect();
-                    var command =
+
+                    var removeOldFolder =
                         sshclient.CreateCommand($"rm -r /crystopia/{packserver.Name}/plugins/ItemsAdder");
-                    command.Execute();
-                    var command2 =
-                        sshclient.CreateCommand($"cd /crystopia/{packserver.Name}/plugins/ && mkdir ItemsAdder");
-                    command2.Execute();
+                    removeOldFolder.Execute();
+
+                    var createNewFolder =
+                        sshclient.CreateCommand($"mkdir -p /crystopia/{packserver.Name}/plugins/ItemsAdder");
+                    createNewFolder.Execute();
+                    Console.WriteLine("ItemsAdder Ordner neu erstellt");
+
+                    string sshremotePath = $"/crystopia/{packserver.Name}/plugins/ItemsAdder/pluginzip.zip";
+                    string extractPath = $"/crystopia/{packserver.Name}/plugins/ItemsAdder/";
+
+                    var downloadZip = sshclient.CreateCommand($"curl -o {sshremotePath} {serverzip}");
+                    downloadZip.Execute();
+                    Console.WriteLine("server.zip heruntergeladen");
+
+                    var unzipAndRemove =
+                        sshclient.CreateCommand($"unzip -o {sshremotePath} -d {extractPath} && rm {sshremotePath}");
+                    unzipAndRemove.Execute();
+                    Console.WriteLine("server.zip entpackt und gelöscht");
+
+                    var setPermissions = sshclient.CreateCommand($"chmod -R 777 {extractPath}");
+                    setPermissions.Execute();
+                    Console.WriteLine("Berechtigungen gesetzt");
+
+                    var dockerCommand =
+                        sshclient.CreateCommand($"docker exec {packserver.Name.ToLower()} mc-send-to-console iaz");
+                    dockerCommand.Execute();
+                    Console.WriteLine("Docker-Befehl ausgeführt");
+
                     sshclient.Disconnect();
                 }
 
-                Console.WriteLine("ItemsAdder cleared");
-
-                string sftpHost = packserver.Host;
-                int sftpPort = 22;
-                string sftpUser = packserver.User;
-                string sftpPass = packserver.Password;
-                string remotePath = $"/crystopia/{packserver.Name}/plugins/ItemsAdder/";
-                string remoteFilePath = $"{remotePath}pluginzip.zip";
-
-                using (HttpClient httpClient = new HttpClient())
-                using (Stream fileStream = await httpClient.GetStreamAsync(serverzip))
-                using (MemoryStream memoryStream = new MemoryStream())
-                using (SftpClient sftpClient = new SftpClient(sftpHost, sftpPort, sftpUser, sftpPass))
-                {
-                    await fileStream.CopyToAsync(memoryStream);
-                    memoryStream.Position = 0;
-
-                    sftpClient.Connect();
-
-                    if (!sftpClient.Exists(remotePath))
-                    {
-                        sftpClient.CreateDirectory(remotePath);
-                    }
-
-                    using (Stream sftpStream = sftpClient.OpenWrite(remoteFilePath))
-                    {
-                        await memoryStream.CopyToAsync(sftpStream);
-                    }
-
-                    sftpClient.Disconnect();
-                }
-
-                Console.WriteLine("pluginzip.zip updated");
-
-                string sshremotePath = $"/crystopia/{packserver.Name}/plugins/ItemsAdder/pluginzip.zip";
-                string extractPath = $"/crystopia/{packserver.Name}/plugins/ItemsAdder/";
-
-                using (var sshclient = new SshClient(host, username, password))
-                {
-                    sshclient.Connect();
-                    var command =
-                        sshclient.CreateCommand(
-                            $"unzip -o {sshremotePath} -d {extractPath} && rm {sshremotePath}");
-                    command.Execute();
-                    var command2 =
-                        sshclient.CreateCommand(
-                            $"docker exec {packserver.Name.ToLower()} mc-send-to-console iaz");
-                    await command2.ExecuteAsync();
-                    sshclient.Disconnect();
-                }
 
                 Console.WriteLine(".zip unzipped - pluginzip.zip deleted - zip Resourcepack");
             }
@@ -300,7 +275,7 @@ app.MapGet("/zipMainPack",
                         var command2 =
                             sshclient.CreateCommand(
                                 $"docker exec {packserver.Name.ToLower()} mc-send-to-console iaz");
-                        await command2.ExecuteAsync();
+                        command2.Execute();
                         sshclient.Disconnect();
                     }
                 }
@@ -344,7 +319,7 @@ app.MapGet("/zipDevPack",
                         var command2 =
                             sshclient.CreateCommand(
                                 $"docker exec {devserver.Name.ToLower()} mc-send-to-console iaz");
-                        await command2.ExecuteAsync();
+                        command2.Execute();
                         sshclient.Disconnect();
                     }
                 }
