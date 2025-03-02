@@ -195,9 +195,10 @@ app.MapGet("/copyToProduction", async (HttpContext context) =>
                 string host = packserver.Host;
                 string username = packserver.User;
                 string password = packserver.Password;
-
+                
                 using (var sshclient = new SshClient(host, username, password))
                 {
+                    sshclient.ConnectionInfo.Timeout = TimeSpan.FromSeconds(30);
                     sshclient.Connect();
 
                     var removeOldFolder =

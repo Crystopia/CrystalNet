@@ -6,24 +6,24 @@
   "ServerURL": "https://cloud.api.crystopia.net/allservers",
   "GitHubToken": "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",
   "Nodes": {
-    "148.251.43.173": {
-      "IP": "148.251.43.173",
+    "77.90.52.172": {
+      "IP": "77.90.52.172",
       "User": "root",
       "Password": "ESdjNKSyeE0zNWIGy3PLxfuwjkdZ6MNejpws7WcZPBSNEbHXmOV1z3N4QfOIxM7M0ZWbWoXyILQWwj4ueUvFpuUYAfjU2oDhyfbKaqP"
     }
   },
   "DevServer": {
-    "148.251.43.173": {
+    "77.90.52.172": {
       "Name": "Dev-Server",
-      "IP": "148.251.43.173",
+      "Host": "77.90.52.172",
       "User": "root",
       "Password": "ESdjNKSyeE0zNWIGy3PLxfuwjkdZ6MNejpws7WcZPBSNEbHXmOV1z3N4QfOIxM7M0ZWbWoXyILQWwj4ueUvFpuUYAfjU2oDhyfbKaqP"
     }
   },
   "PackServer": {
-    "148.251.43.173": {
+    "77.90.52.172": {
       "Name": "Pack-Server",
-      "IP": "148.251.43.173",
+      "Host": "77.90.52.172",
       "User": "root",
       "Password": "ESdjNKSyeE0zNWIGy3PLxfuwjkdZ6MNejpws7WcZPBSNEbHXmOV1z3N4QfOIxM7M0ZWbWoXyILQWwj4ueUvFpuUYAfjU2oDhyfbKaqP"
     }
