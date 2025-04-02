@@ -115,7 +115,7 @@ public class ApplyToOtherServer : Controller
 
                             var command2 =
                                 sshclient.CreateCommand(
-                                    $"docker exec {server.Name.ToLower()} mc-send-to-console iareload");
+                                    $"docker exec {server.Name.ToLower()} mc-send-to-console nexo reload all");
                             command2.Execute();
                             sshclient.Disconnect();
                         }

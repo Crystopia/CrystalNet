@@ -6,9 +6,9 @@ namespace CrystopiaRPAPI.Controllers;
 
 [ApiController]
 [Route("/copyToProduction")]
-public class ZipMainPack : ControllerBase
+public class ZipDevPack : ControllerBase
 {
-    public ZipMainPack()
+    public ZipDevPack()
     {
     }
 
@@ -27,17 +27,18 @@ public class ZipMainPack : ControllerBase
 
             if (token == config.APIKey)
             {
-                var packserver = config.PackServer.First().Value;
-                string host = packserver.Host;
-                string username = packserver.User;
-                string password = packserver.Password;
+                var devserver = config.DevServer.First().Value;
+                string host = devserver.Host;
+                string username = devserver.User;
+                string password = devserver.Password;
 
                 using (var sshclient = new SshClient(host, username, password))
                 {
                     sshclient.Connect();
+
                     var command2 =
                         sshclient.CreateCommand(
-                            $"docker exec {packserver.Name.ToLower()} mc-send-to-console nexo reload pack");
+                            $"docker exec {devserver.Name.ToLower()} mc-send-to-console nexo reload pack");
                     command2.Execute();
                     sshclient.Disconnect();
                 }

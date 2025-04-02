@@ -43,50 +43,6 @@ app.MapControllers();
 var jsontext = await File.ReadAllTextAsync("config.json");
 var config = JsonSerializer.Deserialize<AppConfiguration>(jsontext)!;
 
-app.MapGet("/zipDevPack",
-        async (HttpContext context) =>
-        {
-            var request = context.Request;
-
-            var headers = request.Headers;
-
-            if (headers.ContainsKey("Authorization"))
-            {
-                var token = headers["Authorization"].First();
-
-                if (token == config.APIKey)
-                {
-                    var devserver = config.DevServer.First().Value;
-                    string host = devserver.Host;
-                    string username = devserver.User;
-                    string password = devserver.Password;
-
-                    using (var sshclient = new SshClient(host, username, password))
-                    {
-                        sshclient.Connect();
-
-                        var command2 =
-                            sshclient.CreateCommand(
-                                $"docker exec {devserver.Name.ToLower()} mc-send-to-console iaz");
-                        command2.Execute();
-                        sshclient.Disconnect();
-                    }
-                }
-                else
-                {
-                    context.Response.StatusCode = 401;
-                    Console.WriteLine("Not authorized");
-                }
-            }
-            else
-            {
-                context.Response.StatusCode = 401;
-                Console.WriteLine("Not authorized - No Authorization");
-            }
-        })
-    .WithName("zipDevPack")
-    .WithOpenApi();
-
 app.MapPost("/createServer",
         async (CloudServer cloudServer, HttpContext context) =>
         {
