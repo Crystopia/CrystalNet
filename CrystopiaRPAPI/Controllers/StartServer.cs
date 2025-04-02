@@ -1,23 +1,24 @@
-﻿using Microsoft.AspNetCore.Mvc;
+﻿using CrystopiaRPAPI.Models;
+using Microsoft.AspNetCore.Mvc;
 using MoonlightSpaceAPI.Services;
 using Renci.SshNet;
 
 namespace CrystopiaRPAPI.Controllers;
 
 [ApiController]
-[Route("/zipDevPack")]
-public class ZipDevPack : ControllerBase
+[Route("/startServer")]
+public class StartServer : Controller
 {
-    public ZipDevPack()
+    public StartServer()
     {
     }
 
-    [HttpGet]
-    public async Task<IActionResult> Get()
+    [HttpPost]
+    public async Task<IActionResult> Post([FromBody] ServerAction serverAction)
     {
+        var request = Request;
         var configService = new ConfigService();
         var config = configService.Get();
-        var request = Request;
 
         var headers = request.Headers;
 
@@ -27,10 +28,10 @@ public class ZipDevPack : ControllerBase
 
             if (token == config.APIKey)
             {
-                var devserver = config.DevServer.First().Value;
-                string host = devserver.Host;
-                string username = devserver.User;
-                string password = devserver.Password;
+                var node = config.Nodes[serverAction.Host];
+                string host = serverAction.Host;
+                string username = node.User;
+                string password = node.Password;
 
                 using (var sshclient = new SshClient(host, username, password))
                 {
@@ -38,16 +39,17 @@ public class ZipDevPack : ControllerBase
 
                     var command2 =
                         sshclient.CreateCommand(
-                            $"docker exec {devserver.Name.ToLower()} mc-send-to-console nexo reload pack");
-                    command2.Execute();
+                            $"docker start {serverAction.Name.ToLower()}");
+                    await command2.ExecuteAsync();
                     sshclient.Disconnect();
                 }
 
-                return Ok(new
-                {
-                    success = true,
-                    message = "DevPack zipped",
-                });
+                return Ok(
+                    new
+                    {
+                        success = true,
+                        message = "Server started",
+                    });
             }
             else
             {
@@ -66,11 +68,5 @@ public class ZipDevPack : ControllerBase
                 message = "Unauthorized",
             });
         }
-
-        return Unauthorized(new
-        {
-            success = false,
-            message = "Unauthorized",
-        });
     }
 }

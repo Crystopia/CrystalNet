@@ -5,7 +5,7 @@ using Renci.SshNet;
 namespace CrystopiaRPAPI.Controllers;
 
 [ApiController]
-[Route("/copyToProduction")]
+[Route("/zipMainPack")]
 public class ZipMainPack : ControllerBase
 {
     public ZipMainPack()
@@ -13,7 +13,7 @@ public class ZipMainPack : ControllerBase
     }
 
     [HttpGet]
-    public async Task Get()
+    public async Task<IActionResult> Get()
     {
         var configService = new ConfigService();
         var config = configService.Get();
@@ -41,17 +41,36 @@ public class ZipMainPack : ControllerBase
                     command2.Execute();
                     sshclient.Disconnect();
                 }
+
+                Ok(
+                    new
+                    {
+                        success = true,
+                        message = "MainPack zipped",
+                    });
             }
             else
             {
-                Response.StatusCode = 401;
-                Console.WriteLine("Not authorized");
+                return Unauthorized(new
+                {
+                    success = false,
+                    message = "Unauthorized",
+                });
             }
         }
         else
         {
-            Response.StatusCode = 401;
-            Console.WriteLine("Not authorized - No Authorization");
+            return Unauthorized(new
+            {
+                success = false,
+                message = "Unauthorized",
+            });
         }
+
+        return Unauthorized(new
+        {
+            success = false,
+            message = "Unauthorized",
+        });
     }
 }

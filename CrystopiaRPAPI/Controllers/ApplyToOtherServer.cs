@@ -2,6 +2,7 @@
 using Microsoft.AspNetCore.Mvc;
 using MoonlightSpaceAPI.Services;
 using Newtonsoft.Json;
+using Org.BouncyCastle.Asn1.Iana;
 using Renci.SshNet;
 
 namespace CrystopiaRPAPI.Controllers;
@@ -15,7 +16,7 @@ public class ApplyToOtherServer : Controller
     }
 
     [HttpGet]
-    public async Task<Task> Get()
+    public async Task<IActionResult> Get()
     {
         var request = Request;
         var configService = new ConfigService();
@@ -36,8 +37,6 @@ public class ApplyToOtherServer : Controller
                     .EnsureSuccessStatusCode();
 
                 string responseBody = await response.Content.ReadAsStringAsync();
-                Response.StatusCode = 200;
-                Response.ContentType = "application/json";
 
                 // Default Variabels
                 string fileUrl = config.PackServerPluginZipURL;
@@ -121,6 +120,11 @@ public class ApplyToOtherServer : Controller
                         }
 
                         Console.WriteLine(".zip unzipped - pluginzip.zip deleted");
+                        return Ok(new
+                        {
+                            success = true,
+                            message = "Plugin updated",
+                        });
                     }
                 }
                 catch (Exception ex)
@@ -130,20 +134,32 @@ public class ApplyToOtherServer : Controller
 
                 Response.StatusCode = 200;
                 Response.ContentType = "application/json";
-                return Response.WriteAsync("{'success': true}}");
+                return Ok(new
+                {
+                    success = true,
+                    message = "Plugin updated",
+                });
             }
             else
             {
-                Response.StatusCode = 401;
+                return Unauthorized(new
+                {
+                    success = false,
+                    message = "Unauthorized",
+                });
             }
 
-            Response.ContentType = "application/json";
-            Response.StatusCode = 401;
-            return Response.WriteAsync("{'success': false, 'error': ['no action taken']}}");
+            return Unauthorized(new
+            {
+                success = false,
+                message = "Unauthorized",
+            });
         }
 
-        Response.ContentType = "application/json";
-        Response.StatusCode = 401;
-        return Response.WriteAsync("{'success': false, 'error': ['no action taken']}}");
+        return Unauthorized(new
+        {
+            success = false,
+            message = "Unauthorized",
+        });
     }
 }

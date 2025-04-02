@@ -7,5 +7,5 @@ public class CloudServer
     public int Port { get; set; }
     public string Host { get; set; }
     public string TemplateName { get; set; }
-    public string ItemsAdderPluginZipURL { get; set; }
+    public string PluginZipURL { get; set; }
 }

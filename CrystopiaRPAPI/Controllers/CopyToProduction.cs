@@ -15,7 +15,7 @@ public class CopyToProduction : ControllerBase
     }
 
     [HttpGet]
-    public async Task Get()
+    public async Task<IActionResult> Get()
     {
         var configService = new ConfigService();
         var config = configService.Get();
@@ -75,19 +75,35 @@ public class CopyToProduction : ControllerBase
 
 
                 Console.WriteLine(".zip unzipped - pluginzip.zip deleted - zip Resourcepack");
+                return Ok(
+                    new
+                    {
+                        success = true,
+                        message = "Plugin updated",
+                    });
             }
             else
             {
-                Response.StatusCode = 401;
-                Console.WriteLine("Not authorized");
+                return Unauthorized(new
+                {
+                    success = false,
+                    message = "Unauthorized",
+                });
             }
         }
         else
         {
-            Response.StatusCode = 401;
-            Console.WriteLine("Not authorized - No Authorization");
+            return Unauthorized(new
+            {
+                success = false,
+                message = "Unauthorized",
+            });
         }
 
-        Response.StatusCode = 401;
+        return Unauthorized(new
+        {
+            success = false,
+            message = "Unauthorized",
+        });
     }
 }
