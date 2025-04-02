@@ -3,6 +3,8 @@ using System.Net.Http.Headers;
 using System.Text.Json;
 using CrystopiaRPAPI.Helpers;
 using CrystopiaRPAPI.Models;
+using Microsoft.OpenApi.Models;
+using MoonlightSpaceAPI.Services;
 using Newtonsoft.Json;
 using Octokit;
 using Renci.SshNet;
@@ -14,7 +16,13 @@ var builder = WebApplication.CreateBuilder(args);
 // Add services to the container.
 // Learn more about configuring Swagger/OpenAPI at https://aka.ms/aspnetcore/swashbuckle
 builder.Services.AddEndpointsApiExplorer();
-builder.Services.AddSwaggerGen();
+
+builder.Services.AddSwaggerGen(
+    c => { c.SwaggerDoc("v1", new OpenApiInfo() { Title = "CrystopiaCloudAPI", Version = "v1" }); });
+
+builder.Services.AddScoped<ConfigService>();
+
+builder.Services.AddControllers();
 
 var app = builder.Build();
 
@@ -27,273 +35,13 @@ if (app.Environment.IsDevelopment())
 }
 
 app.UseHttpsRedirection();
+app.UseRouting();
+app.MapControllers();
 
-var configFile = File.Exists("config.json");
 
-if (!configFile)
-{
-    var defaultConfig = JsonSerializer.Serialize(new AppConfiguration(), new JsonSerializerOptions()
-    {
-        PropertyNameCaseInsensitive = true,
-    });
-    await File.WriteAllTextAsync("config.json", defaultConfig);
-}
 
 var jsontext = await File.ReadAllTextAsync("config.json");
 var config = JsonSerializer.Deserialize<AppConfiguration>(jsontext)!;
-
-// Set Default Node
-/*
-{
-"<ip>": {
-"IP"="148.251.43.173",
-"User"="root",
-"Password"="",
-}
-
-*/
-
-app.MapGet("/applyToOtherServer", async (HttpContext context) =>
-    {
-        var request = context.Request;
-
-        var headers = request.Headers;
-
-        if (headers.ContainsKey("Authorization"))
-        {
-            var token = headers["Authorization"].First();
-            if (token == config.APIKey)
-            {
-                string url = config.ServerURL;
-
-                HttpClient client = new HttpClient();
-                HttpResponseMessage response = await client.GetAsync(url);
-                response
-                    .EnsureSuccessStatusCode();
-
-                string responseBody = await response.Content.ReadAsStringAsync();
-                context.Response.StatusCode = 200;
-                context.Response.ContentType = "application/json";
-
-                // Default Variabels
-                string fileUrl = config.PackServerPluginZipURL;
-                try
-                {
-                    List<ServerInfo> servers = JsonConvert.DeserializeObject<List<ServerInfo>>(responseBody);
-
-
-                    foreach (var server in servers)
-                    {
-                        var node = config.Nodes[server.Ip];
-                        if (node == null) continue;
-
-
-                        string host = server.Ip;
-                        string username = node.User;
-                        string password = node.Password;
-
-                        using (var sshclient = new SshClient(host, username, password))
-                        {
-                            sshclient.Connect();
-                            var command =
-                                sshclient.CreateCommand($"rm -r /crystopia/{server.Name}/plugins/ItemsAdder");
-                            command.Execute();
-                            var command2 =
-                                sshclient.CreateCommand($"cd /crystopia/{server.Name}/plugins/ && mkdir ItemsAdder");
-                            command2.Execute();
-                            sshclient.Disconnect();
-                        }
-
-                        Console.WriteLine("ItemsAdder cleared");
-
-                        string sftpHost = server.Ip;
-                        int sftpPort = 22;
-                        string sftpUser = node.User;
-                        string sftpPass = node.Password;
-                        string remotePath = $"/crystopia/{server.Name}/plugins/ItemsAdder/";
-                        string remoteFilePath = $"{remotePath}pluginzip.zip";
-
-                        using (HttpClient httpClient = new HttpClient())
-                        using (Stream fileStream = await httpClient.GetStreamAsync(fileUrl))
-                        using (MemoryStream memoryStream = new MemoryStream())
-                        using (SftpClient sftpClient = new SftpClient(sftpHost, sftpPort, sftpUser, sftpPass))
-                        {
-                            await fileStream.CopyToAsync(memoryStream);
-                            memoryStream.Position = 0;
-
-                            sftpClient.Connect();
-
-                            if (!sftpClient.Exists(remotePath))
-                            {
-                                sftpClient.CreateDirectory(remotePath);
-                            }
-
-                            using (Stream sftpStream = sftpClient.OpenWrite(remoteFilePath))
-                            {
-                                await memoryStream.CopyToAsync(sftpStream);
-                            }
-
-                            sftpClient.Disconnect();
-                        }
-
-                        Console.WriteLine("pluginzip.zip updated");
-
-                        string sshremotePath = $"/crystopia/{server.Name}/plugins/ItemsAdder/pluginzip.zip";
-                        string extractPath = $"/crystopia/{server.Name}/plugins/ItemsAdder/";
-
-                        using (var sshclient = new SshClient(host, username, password))
-                        {
-                            sshclient.Connect();
-                            var command =
-                                sshclient.CreateCommand(
-                                    $"unzip -o {sshremotePath} -d {extractPath} && rm {sshremotePath}");
-                            command.Execute();
-
-                            var command2 =
-                                sshclient.CreateCommand(
-                                    $"docker exec {server.Name.ToLower()} mc-send-to-console iareload");
-                            command2.Execute();
-                            sshclient.Disconnect();
-                        }
-
-                        Console.WriteLine(".zip unzipped - pluginzip.zip deleted");
-                    }
-                }
-                catch (Exception ex)
-                {
-                    Console.WriteLine($"Error: {ex}");
-                }
-
-                context.Response.StatusCode = 200;
-                context.Response.ContentType = "application/json";
-                await context.Response.WriteAsync("{'success': true}}");
-            }
-            else
-            {
-                context.Response.StatusCode = 401;
-            }
-        }
-    })
-    .WithName("applyToOtherServer")
-    .WithOpenApi();
-
-app.MapGet("/copyToProduction", async (HttpContext context) =>
-    {
-        var request = context.Request;
-
-        var headers = request.Headers;
-
-        if (headers.ContainsKey("Authorization"))
-        {
-            var token = headers["Authorization"].First();
-
-            if (token == config.APIKey)
-            {
-                var serverzip = config.DevServerPluginZipURL;
-                var packserver = config.PackServer.First().Value;
-
-                string host = packserver.Host;
-                string username = packserver.User;
-                string password = packserver.Password;
-                
-                using (var sshclient = new SshClient(host, username, password))
-                {
-                    sshclient.ConnectionInfo.Timeout = TimeSpan.FromSeconds(30);
-                    sshclient.Connect();
-
-                    var removeOldFolder =
-                        sshclient.CreateCommand($"rm -r /crystopia/{packserver.Name}/plugins/ItemsAdder");
-                    removeOldFolder.Execute();
-
-                    var createNewFolder =
-                        sshclient.CreateCommand($"mkdir -p /crystopia/{packserver.Name}/plugins/ItemsAdder");
-                    createNewFolder.Execute();
-                    Console.WriteLine("ItemsAdder Ordner neu erstellt");
-
-                    string sshremotePath = $"/crystopia/{packserver.Name}/plugins/ItemsAdder/pluginzip.zip";
-                    string extractPath = $"/crystopia/{packserver.Name}/plugins/ItemsAdder/";
-
-                    var downloadZip = sshclient.CreateCommand($"curl -o {sshremotePath} {serverzip}");
-                    downloadZip.Execute();
-                    Console.WriteLine("server.zip heruntergeladen");
-
-                    var unzipAndRemove =
-                        sshclient.CreateCommand($"unzip -o {sshremotePath} -d {extractPath} && rm {sshremotePath}");
-                    unzipAndRemove.Execute();
-                    Console.WriteLine("server.zip entpackt und gelöscht");
-
-                    var setPermissions = sshclient.CreateCommand($"chmod -R 777 {extractPath}");
-                    setPermissions.Execute();
-                    Console.WriteLine("Berechtigungen gesetzt");
-
-                    var dockerCommand =
-                        sshclient.CreateCommand($"docker exec {packserver.Name.ToLower()} mc-send-to-console iaz");
-                    dockerCommand.Execute();
-                    Console.WriteLine("Docker-Befehl ausgeführt");
-
-                    sshclient.Disconnect();
-                }
-
-
-                Console.WriteLine(".zip unzipped - pluginzip.zip deleted - zip Resourcepack");
-            }
-            else
-            {
-                context.Response.StatusCode = 401;
-                Console.WriteLine("Not authorized");
-            }
-        }
-        else
-        {
-            context.Response.StatusCode = 401;
-            Console.WriteLine("Not authorized - No Authorization");
-        }
-    })
-    .WithName("copyToProduction")
-    .WithOpenApi();
-
-app.MapGet("/zipMainPack",
-        async (HttpContext context) =>
-        {
-            var request = context.Request;
-
-            var headers = request.Headers;
-
-            if (headers.ContainsKey("Authorization"))
-            {
-                var token = headers["Authorization"].First();
-
-                if (token == config.APIKey)
-                {
-                    var packserver = config.PackServer.First().Value;
-                    string host = packserver.Host;
-                    string username = packserver.User;
-                    string password = packserver.Password;
-
-                    using (var sshclient = new SshClient(host, username, password))
-                    {
-                        sshclient.Connect();
-                        var command2 =
-                            sshclient.CreateCommand(
-                                $"docker exec {packserver.Name.ToLower()} mc-send-to-console iaz");
-                        command2.Execute();
-                        sshclient.Disconnect();
-                    }
-                }
-                else
-                {
-                    context.Response.StatusCode = 401;
-                    Console.WriteLine("Not authorized");
-                }
-            }
-            else
-            {
-                context.Response.StatusCode = 401;
-                Console.WriteLine("Not authorized - No Authorization");
-            }
-        })
-    .WithName("zipMainPack")
-    .WithOpenApi();
 
 app.MapGet("/zipDevPack",
         async (HttpContext context) =>
@@ -417,21 +165,21 @@ app.MapPost("/createServer",
                     {
                         sshclient.Connect();
                         var command =
-                            sshclient.CreateCommand($"rm -r /crystopia/{cloudServer.Name}/plugins/ItemsAdder");
+                            sshclient.CreateCommand($"rm -r /crystopia/{cloudServer.Name}/plugins/Nexo");
                         command.Execute();
                         var command2 =
-                            sshclient.CreateCommand($"cd /crystopia/{cloudServer.Name}/plugins/ && mkdir ItemsAdder");
+                            sshclient.CreateCommand($"cd /crystopia/{cloudServer.Name}/plugins/ && mkdir Nexo");
                         command2.Execute();
                         sshclient.Disconnect();
                     }
 
-                    Console.WriteLine("ItemsAdder cleared");
+                    Console.WriteLine("Nexo cleared");
 
                     string sftpHost = cloudServer.Host;
                     int sftpPort = 22;
                     string sftpUser = node.User;
                     string sftpPass = node.Password;
-                    string remotePath = $"/crystopia/{cloudServer.Name}/plugins/ItemsAdder/";
+                    string remotePath = $"/crystopia/{cloudServer.Name}/plugins/Nexo/";
                     string remoteFilePath = $"{remotePath}pluginzip.zip";
 
                     using (HttpClient httpClient = new HttpClient())
@@ -459,8 +207,8 @@ app.MapPost("/createServer",
 
                     Console.WriteLine("pluginzip.zip updated");
 
-                    string pluginsshremotePath = $"/crystopia/{cloudServer.Name}/plugins/ItemsAdder/pluginzip.zip";
-                    string pluginextractPath = $"/crystopia/{cloudServer.Name}/plugins/ItemsAdder/";
+                    string pluginsshremotePath = $"/crystopia/{cloudServer.Name}/plugins/Nexo/pluginzip.zip";
+                    string pluginextractPath = $"/crystopia/{cloudServer.Name}/plugins/Nexo/";
 
                     using (var sshclient = new SshClient(host, username, password))
                     {
