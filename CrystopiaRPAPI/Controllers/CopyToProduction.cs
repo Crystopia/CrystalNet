@@ -66,7 +66,7 @@ public class CopyToProduction : ControllerBase
                     Console.WriteLine("Berechtigungen gesetzt");
 
                     var dockerCommand =
-                        sshclient.CreateCommand($"docker exec {packserver.Name.ToLower()} mc-send-to-console iaz");
+                        sshclient.CreateCommand($"docker exec {packserver.Name.ToLower()} mc-send-to-console nexo reload all");
                     dockerCommand.Execute();
                     Console.WriteLine("Docker-Befehl ausgeführt");
 
