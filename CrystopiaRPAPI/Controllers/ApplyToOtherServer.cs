@@ -110,7 +110,7 @@ public class ApplyToOtherServer : Controller
                             var command =
                                 sshclient.CreateCommand(
                                     $"unzip -o {sshremotePath} -d {extractPath} && rm {sshremotePath}");
-                            command.Execute();
+                            await command.ExecuteAsync();
 
                             var command2 =
                                 sshclient.CreateCommand(
