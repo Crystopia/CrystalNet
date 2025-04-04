@@ -2,7 +2,6 @@
 using Microsoft.AspNetCore.Mvc;
 using MoonlightSpaceAPI.Services;
 using Newtonsoft.Json;
-using Org.BouncyCastle.Asn1.Iana;
 using Renci.SshNet;
 
 namespace CrystopiaRPAPI.Controllers;
@@ -18,148 +17,94 @@ public class ApplyToOtherServer : Controller
     [HttpGet]
     public async Task<IActionResult> Get()
     {
-        var request = Request;
         var configService = new ConfigService();
         var config = configService.Get();
 
-        var headers = request.Headers;
+        var headers = Request.Headers["Authorization"];
+        var token = headers.FirstOrDefault();
 
-        if (headers.ContainsKey("Authorization"))
+        if (token == config.APIKey)
         {
-            var token = headers["Authorization"].First();
-            if (token == config.APIKey)
+            try
             {
-                string url = config.ServerURL;
-
-                HttpClient client = new HttpClient();
-                HttpResponseMessage response = await client.GetAsync(url);
-                response
-                    .EnsureSuccessStatusCode();
-
-                string responseBody = await response.Content.ReadAsStringAsync();
-
-                // Default Variabels
-                string fileUrl = config.PackServerPluginZipURL;
-                try
+                using (HttpClient client = new HttpClient())
                 {
-                    List<ServerInfo> servers = JsonConvert.DeserializeObject<List<ServerInfo>>(responseBody);
+                    HttpResponseMessage response = await client.GetAsync(config.ServerURL);
+                    response.EnsureSuccessStatusCode();
+                    string responseBody = await response.Content.ReadAsStringAsync();
 
+                    List<ServerInfo> servers = JsonConvert.DeserializeObject<List<ServerInfo>>(responseBody);
+                    if (servers == null || servers.Count == 0)
+                        return BadRequest(new { success = false, message = "Keine Server gefunden." });
+
+                    string fileUrl = config.PackServerPluginZipURL;
+                    List<object> results = new List<object>();
 
                     foreach (var server in servers)
                     {
-                        var node = config.Nodes[server.Ip];
-                        if (node == null) continue;
-
-
-                        string host = server.Ip;
-                        string username = node.User;
-                        string password = node.Password;
-
-                        using (var sshclient = new SshClient(host, username, password))
+                        try
                         {
-                            sshclient.Connect();
-                            var command =
-                                sshclient.CreateCommand($"rm -r /crystopia/{server.Name}/plugins/Nexo");
-                            command.Execute();
-                            var command2 =
-                                sshclient.CreateCommand($"cd /crystopia/{server.Name}/plugins/ && mkdir Nexo");
-                            command2.Execute();
-                            sshclient.Disconnect();
-                        }
+                            Console.WriteLine($"Verarbeite Server: {server.Name}");
 
-                        Console.WriteLine("Nexo cleared");
-
-                        string sftpHost = server.Ip;
-                        int sftpPort = 22;
-                        string sftpUser = node.User;
-                        string sftpPass = node.Password;
-                        string remotePath = $"/crystopia/{server.Name}/plugins/Nexo/";
-                        string remoteFilePath = $"{remotePath}pluginzip.zip";
-
-                        using (HttpClient httpClient = new HttpClient())
-                        using (Stream fileStream = await httpClient.GetStreamAsync(fileUrl))
-                        using (MemoryStream memoryStream = new MemoryStream())
-                        using (SftpClient sftpClient = new SftpClient(sftpHost, sftpPort, sftpUser, sftpPass))
-                        {
-                            await fileStream.CopyToAsync(memoryStream);
-                            memoryStream.Position = 0;
-
-                            sftpClient.Connect();
-
-                            if (!sftpClient.Exists(remotePath))
+                            var node = config.Nodes.GetValueOrDefault(server.Ip);
+                            if (node == null)
                             {
-                                sftpClient.CreateDirectory(remotePath);
+                                Console.WriteLine($"Kein Knoten für {server.Ip} gefunden, überspringe...");
+                                continue;
                             }
 
-                            using (Stream sftpStream = sftpClient.OpenWrite(remoteFilePath))
+                            string host = server.Ip;
+                            string username = node.User;
+                            string password = node.Password;
+                            string pluginPath = $"/crystopia/{server.Name}/plugins/Nexo";
+
+                            using (var sshclient = new SshClient(host, username, password))
                             {
-                                await memoryStream.CopyToAsync(sftpStream);
+                                sshclient.ConnectionInfo.Timeout = TimeSpan.FromSeconds(30);
+                                sshclient.Connect();
+
+                                sshclient.CreateCommand($"rm -r {pluginPath}").Execute();
+                                sshclient.CreateCommand($"mkdir -p {pluginPath}").Execute();
+                                Console.WriteLine("Nexo-Ordner geleert und neu erstellt");
+
+                                string sshremotePath = $"{pluginPath}/pluginzip.zip";
+                                sshclient.CreateCommand($"curl -o {sshremotePath} {fileUrl}").Execute();
+                                Console.WriteLine("server.zip heruntergeladen");
+
+                                sshclient.CreateCommand(
+                                    $"unzip -o {sshremotePath} -d {pluginPath} && rm {sshremotePath}").Execute();
+                                Console.WriteLine("server.zip entpackt und gelöscht");
+
+                                sshclient.CreateCommand($"chmod -R 777 {pluginPath}").Execute();
+                                Console.WriteLine("Berechtigungen gesetzt");
+
+                                sshclient.CreateCommand(
+                                        $"docker exec {server.Name.ToLower()} mc-send-to-console nexo reload all")
+                                    .Execute();
+                                Console.WriteLine("Docker-Befehl ausgeführt");
+
+                                sshclient.Disconnect();
                             }
 
-                            sftpClient.Disconnect();
+                            results.Add(new { server = server.Name, success = true, message = "Plugin updated" });
                         }
-
-                        Console.WriteLine("pluginzip.zip updated");
-
-                        string sshremotePath = $"/crystopia/{server.Name}/plugins/Nexo/pluginzip.zip";
-                        string extractPath = $"/crystopia/{server.Name}/plugins/Nexo/";
-
-                        using (var sshclient = new SshClient(host, username, password))
+                        catch (Exception ex)
                         {
-                            sshclient.Connect();
-                            var command =
-                                sshclient.CreateCommand(
-                                    $"unzip -o {sshremotePath} -d {extractPath} && rm {sshremotePath}");
-                            await command.ExecuteAsync();
-
-                            var command2 =
-                                sshclient.CreateCommand(
-                                    $"docker exec {server.Name.ToLower()} mc-send-to-console nexo reload all");
-                            command2.Execute();
-                            sshclient.Disconnect();
+                            Console.WriteLine($"Fehler bei {server.Name}: {ex.Message}");
+                            results.Add(
+                                new { server = server.Name, success = false, message = $"Fehler: {ex.Message}" });
                         }
-
-                        Console.WriteLine(".zip unzipped - pluginzip.zip deleted");
-                        return Ok(new
-                        {
-                            success = true,
-                            message = "Plugin updated",
-                        });
                     }
-                }
-                catch (Exception ex)
-                {
-                    Console.WriteLine($"Error: {ex}");
-                }
 
-                Response.StatusCode = 200;
-                Response.ContentType = "application/json";
-                return Ok(new
-                {
-                    success = true,
-                    message = "Plugin updated",
-                });
+                    return Ok(new { success = true, message = "Updates abgeschlossen", results });
+                }
             }
-            else
+            catch (Exception ex)
             {
-                return Unauthorized(new
-                {
-                    success = false,
-                    message = "Unauthorized",
-                });
+                return StatusCode(500, new { success = false, message = $"Serverfehler: {ex.Message}" });
             }
-
-            return Unauthorized(new
-            {
-                success = false,
-                message = "Unauthorized",
-            });
         }
 
-        return Unauthorized(new
-        {
-            success = false,
-            message = "Unauthorized",
-        });
+        return Unauthorized(new { success = false, message = "Unauthorized" });
     }
 }
